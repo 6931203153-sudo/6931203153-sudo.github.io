@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CUTE CALENDAR - AI Student Task & Time Manager</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Fredoka & Prompt) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FullCalendar CSS & JS -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'],
+                        cute: ['Fredoka', 'Prompt', 'sans-serif'],
+                    },
+                    colors: {
+                        pastel: {
+                            pink: '#FFD1DC',
+                            pinkDark: '#FF85A1',
+                            purple: '#E2D4F9',
+                            purpleDark: '#9D4EDD',
+                            blue: '#C5E3F6',
+                            blueDark: '#4EA8DE',
+                            yellow: '#FFF1C5',
+                            yellowDark: '#F4A261',
+                            green: '#D8F3DC',
+                            greenDark: '#52B788',
+                            bg: '#FFF5F7',
+                            card: '#FFFFFF',
+                        }
+                    },
+                    boxShadow: {
+                        'cute': '0 8px 25px -5px rgba(255, 182, 193, 0.4), 0 8px 10px -6px rgba(255, 182, 193, 0.2)',
+                        'cute-sm': '0 4px 12px rgba(255, 182, 193, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #FFF5F7;
+            background-image: radial-gradient(#FFB6C1 0.75px, transparent 0.75px), radial-gradient(#FFB6C1 0.75px, #FFF5F7 0.75px);
+            background-size: 30px 30px;
+            background-position: 0 0, 15px 15px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #FFE5EC;
+            border-radius: 20px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #FFB3C6;
+            border-radius: 20px;
+            border: 2px solid #FFE5EC;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FF85A1;
+        }
+
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-6px) rotate(1.5deg); }
+        }
+        .animate-float {
+            animation: floatSlow 3.5s ease-in-out infinite;
+        }
+
+        .cute-card {
+            border-radius: 24px;
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .cute-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .cute-btn {
+            border-radius: 16px;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .cute-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* FullCalendar Custom Cute Theme Styling */
+        .fc {
+            --fc-border-color: #FFE5EC;
+            --fc-button-text-color: #FF6B8B;
+            --fc-button-bg-color: #FFF0F5;
+            --fc-button-border-color: #FFC2D1;
+            --fc-button-hover-bg-color: #FFE5EC;
+            --fc-button-hover-border-color: #FFB3C6;
+            --fc-button-active-bg-color: #FF85A1;
+            --fc-button-active-border-color: #FF85A1;
+            --fc-today-bg-color: #FFF0F3;
+            font-family: 'Prompt', sans-serif;
+            border-radius: 18px;
+            overflow: hidden;
+        }
+        .fc-toolbar-title {
+            font-family: 'Fredoka', 'Prompt', sans-serif !important;
+            color: #FF4D79 !important;
+            font-size: 1.25rem !important;
+        }
+        .fc-event {
+            border-radius: 10px !important;
+            padding: 2px 5px !important;
+            font-size: 0.75rem !important;
+            border: none !important;
+            box-shadow: 0 2px 6px rgba(255, 133, 161, 0.2);
+        }
+    </style>
+
+    <!-- Firebase Modular SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword, 
+            signOut, 
+            onAuthStateChanged,
+            GoogleAuthProvider,
+            signInWithPopup,
+            signInAnonymously
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            getDocs, 
+            deleteDoc, 
+            onSnapshot 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global App State & Config Initialization
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "demo-key",
+                authDomain: "demo.firebaseapp.com",
+                projectId: "demo-project",
+                storageBucket: "demo.appspot.com",
+                messagingSenderId: "123456789",
+                appId: "1:123456789:web:demo"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'cute-calendar-app';
+
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+        window.appId = appId;
+        window.GoogleAuthProvider = GoogleAuthProvider;
+        window.signInWithPopup = signInWithPopup;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.signOut = signOut;
+        window.signInAnonymously = signInAnonymously;
+        window.collection = collection;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.onSnapshot = onSnapshot;
+
+        // Auth Listener State Handler
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.currentUser = user;
+                document.getElementById('authOverlay').classList.add('hidden');
+                document.getElementById('mainAppLayout').classList.remove('hidden');
+                document.getElementById('userEmailDisplay').innerText = user.email || (user.isAnonymous ? 'Guest Mode (นักเรียน)' : 'Student User');
+                document.getElementById('userAvatarText').innerText = (user.email ? user.email.charAt(0).toUpperCase() : '🎀');
+                
+                // Load User Tasks Realtime Listener
+                subscribeUserTasks(user.uid);
+                showToast("ยินดีต้อนรับกลับบ้านนะคุณนักเรียน! 🎀✨", "success");
+            } else {
+                window.currentUser = null;
+                document.getElementById('authOverlay').classList.remove('hidden');
+                document.getElementById('mainAppLayout').classList.add('hidden');
+            }
+        });
+    </script>
+</head>
+<body class="bg-pastel-bg text-slate-700 font-sans h-full overflow-hidden flex flex-col">
+
+    <!-- ================= AUTHENTICATION MODAL OVERLAY ================= -->
+    <div id="authOverlay" class="fixed inset-0 bg-pink-100/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full border-4 border-pink-200 shadow-cute space-y-6 relative overflow-hidden">
+            
+            <!-- Cute Background Floating Stickers -->
+            <div class="absolute -top-4 -right-4 text-6xl opacity-20 pointer-events-none animate-float">🌸</div>
+            <div class="absolute -bottom-4 -left-4 text-6xl opacity-20 pointer-events-none animate-float">🐰</div>
+
+            <!-- Logo Header -->
+            <div class="text-center space-y-2">
+                <div class="w-16 h-16 bg-pink-100 rounded-3xl mx-auto flex items-center justify-center text-3xl shadow-cute-sm animate-bounce">
+                    🗓️
+                </div>
+                <h1 class="font-cute font-bold text-3xl text-pink-500 tracking-wide">CUTE CALENDAR</h1>
+                <p class="text-xs text-pink-400 font-medium">เข้าสู่ระบบเพื่อจัดตารางเรียนและภาระงานด้วย AI 💕</p>
+            </div>
+
+            <!-- Login Form -->
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-slate-600">อีเมล (Email)</label>
+                    <input type="email" id="authEmail" placeholder="student@university.ac.th" class="w-full text-sm p-3 mt-1 border-2 border-pink-100 rounded-2xl focus:border-pink-400 focus:outline-none bg-pink-50/20">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-600">รหัสผ่าน (Password)</label>
+                    <input type="password" id="authPassword" placeholder="••••••••" class="w-full text-sm p-3 mt-1 border-2 border-pink-100 rounded-2xl focus:border-pink-400 focus:outline-none bg-pink-50/20">
+                </div>
+
+                <div class="pt-2 space-y-2">
+                    <button onclick="handleEmailLogin()" class="w-full bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-bold py-3 rounded-2xl cute-btn shadow-cute transition text-sm flex items-center justify-center space-x-2">
+                        <span>💖 เข้าสู่ระบบด้วยอีเมล</span>
+                    </button>
+                    <button onclick="handleEmailSignUp()" class="w-full bg-pink-100 hover:bg-pink-200 text-pink-600 font-bold py-3 rounded-2xl cute-btn transition text-sm flex items-center justify-center space-x-2">
+                        <span>✨ สมัครสมาชิกใหม่</span>
+                    </button>
+                </div>
+
+                <div class="relative flex py-2 items-center">
+                    <div class="flex-grow border-t border-pink-100"></div>
+                    <span class="flex-shrink mx-3 text-xs text-slate-400 font-medium">หรือ</span>
+                    <div class="flex-grow border-t border-pink-100"></div>
+                </div>
+
+                <button onclick="handleGoogleLogin()" class="w-full border-2 border-pink-200 hover:border-pink-300 bg-white text-slate-700 font-bold py-2.5 rounded-2xl cute-btn transition text-xs flex items-center justify-center space-x-2 shadow-2xs">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4" alt="Google">
+                    <span>เข้าสู่ระบบด้วย Google Account</span>
+                </button>
+
+                <button onclick="handleGuestLogin()" class="w-full text-xs text-pink-400 hover:text-pink-600 font-semibold underline pt-2 text-center block">
+                    ทดลองใช้งานแบบ Guest (ไม่ต้องสมัคร) 🌸
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MAIN APP LAYOUT ================= -->
+    <div id="mainAppLayout" class="hidden flex flex-col md:flex-row h-full overflow-hidden">
+
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="fixed md:relative inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out w-72 bg-white/95 backdrop-blur-md flex flex-col z-40 border-r-2 border-pink-100 shadow-cute">
+            
+            <!-- App Logo Header -->
+            <div class="p-6 flex items-center space-x-3 border-b border-pink-100">
+                <div class="w-12 h-12 bg-pink-100 rounded-2xl flex items-center justify-center text-2xl animate-float shadow-cute-sm">
+                    🗓️
+                </div>
+                <div>
+                    <h1 class="font-cute font-bold text-2xl text-pink-500 leading-none">CUTE CALENDAR</h1>
+                    <p class="text-xs font-medium text-pink-300 mt-1">✨ AI Task & Time Manager ✨</p>
+                </div>
+            </div>
+
+            <!-- Mascot Status Badge -->
+            <div class="px-5 py-3 mx-4 mt-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl border border-pink-100 flex items-center space-x-3">
+                <div class="text-3xl animate-bounce">🐰</div>
+                <div class="text-xs">
+                    <p class="font-bold text-pink-600">น้องต่าย AI พร้อมช่วย!</p>
+                    <p class="text-slate-400 text-[11px]">สถานะ: เคลียร์งานสบายใจ 💕</p>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+                <a href="#" onclick="switchTab('calendar')" id="nav-calendar" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium transition-all bg-pink-400 text-white shadow-cute-sm">
+                    <span class="text-lg">📅</span>
+                    <span class="text-sm font-semibold">ปฏิทินงาน (Calendar)</span>
+                </a>
+                <a href="#" onclick="switchTab('extractor')" id="nav-extractor" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium text-slate-500 hover:text-pink-500 hover:bg-pink-50 transition-all">
+                    <span class="text-lg">📝</span>
+                    <span class="text-sm font-semibold">1. AI อ่านโจทย์สั่งงาน</span>
+                </a>
+                <a href="#" onclick="switchTab('predictor')" id="nav-predictor" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium text-slate-500 hover:text-pink-500 hover:bg-pink-50 transition-all">
+                    <span class="text-lg">📊</span>
+                    <span class="text-sm font-semibold">2. Workload Predictor</span>
+                </a>
+                <a href="#" onclick="switchTab('scheduler')" id="nav-scheduler" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium text-slate-500 hover:text-pink-500 hover:bg-pink-50 transition-all">
+                    <span class="text-lg">🧩</span>
+                    <span class="text-sm font-semibold">3. AI Smart Scheduler</span>
+                </a>
+                <a href="#" onclick="switchTab('replanning')" id="nav-replanning" class="nav-item flex items-center space-x-3 px-4 py-3 rounded-2xl font-medium text-slate-500 hover:text-pink-500 hover:bg-pink-50 transition-all">
+                    <span class="text-lg">🔄</span>
+                    <span class="text-sm font-semibold">4. AI Dynamic Replanning</span>
+                </a>
+            </nav>
+
+            <!-- Logged-in User Footer -->
+            <div class="p-4 border-t border-pink-100 bg-pink-50/50 flex items-center justify-between">
+                <div class="flex items-center space-x-2.5 overflow-hidden">
+                    <div id="userAvatarText" class="w-9 h-9 rounded-full bg-pink-300 border-2 border-white flex items-center justify-center text-white font-bold text-sm shadow-2xs flex-shrink-0">
+                        🎀
+                    </div>
+                    <div class="text-xs truncate">
+                        <p id="userEmailDisplay" class="font-bold text-slate-700 truncate">student@mail.com</p>
+                        <p class="text-pink-400 font-medium">Online Status</p>
+                    </div>
+                </div>
+                <button onclick="handleLogout()" class="p-2 text-pink-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="ออกจากระบบ">
+                    <i class="fa-solid fa-right-from-bracket text-base"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden">
+
+            <!-- Mobile Top Header Bar -->
+            <header class="md:hidden bg-white/90 backdrop-blur-md text-pink-500 p-4 flex justify-between items-center border-b border-pink-100 shadow-2xs">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl">🌸</span>
+                    <span class="font-cute font-bold text-xl text-pink-500">CUTE CALENDAR</span>
+                </div>
+                <button onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full')" class="text-pink-400 hover:text-pink-600 p-2">
+                    <i class="fa-solid fa-bars-staggered text-xl"></i>
+                </button>
+            </header>
+
+            <!-- Page Title Bar -->
+            <div class="bg-white/80 backdrop-blur-md border-b border-pink-100 px-6 py-3.5 flex justify-between items-center shadow-2xs">
+                <div>
+                    <h2 id="pageTitle" class="text-lg font-bold font-cute text-pink-600 flex items-center space-x-2">
+                        <span>📅 ปฏิทินและแผนการทำงาน (Full Calendar View)</span>
+                    </h2>
+                    <p id="pageSubtitle" class="text-xs text-slate-400">แสดงภาพรวมกำหนดส่งและขั้นตอนย่อยแยกตามสีวิชา 🌸</p>
+                </div>
+                <button onclick="switchTab('extractor')" class="bg-pink-400 hover:bg-pink-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl cute-btn transition shadow-cute-sm flex items-center space-x-1.5">
+                    <span>➕</span>
+                    <span>เพิ่มงานใหม่</span>
+                </button>
+            </div>
+
+            <!-- Tab Contents Container -->
+            <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+
+                <!-- TAB: FULL CALENDAR -->
+                <div id="tab-calendar" class="tab-content block space-y-4 max-w-6xl mx-auto">
+                    <div class="bg-white p-5 cute-card shadow-cute border-2 border-pink-100">
+                        <div id="calendar"></div>
+                    </div>
+                </div>
+
+                <!-- TAB 1: AI TASK EXTRACTOR -->
+                <div id="tab-extractor" class="tab-content hidden space-y-6 max-w-5xl mx-auto">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        
+                        <!-- Left: Input & Upload -->
+                        <div class="bg-white p-6 cute-card shadow-cute border-2 border-pink-100 flex flex-col justify-between space-y-4">
+                            <div>
+                                <div class="flex items-center space-x-2 mb-4">
+                                    <div class="p-2 bg-pink-100 rounded-xl text-pink-500 text-base">📂</div>
+                                    <h3 class="font-bold text-slate-700 text-sm">อัปโหลดโจทย์หรือพิมพ์สั่งงาน</h3>
+                                </div>
+                                
+                                <div onclick="simulateFileUpload()" class="border-2 border-dashed border-pink-200 rounded-2xl p-6 text-center hover:border-pink-400 hover:bg-pink-50/50 transition cursor-pointer mb-4 bg-pink-50/20">
+                                    <div class="text-4xl mb-2">📄✨</div>
+                                    <p class="text-xs font-bold text-pink-600">คลิกเพื่ออัปโหลดภาพ/ไฟล์คำสั่งงาน</p>
+                                    <p class="text-[11px] text-slate-400 mt-1">ระบบจะใช้ AI อ่านข้อความให้อัตโนมัติ</p>
+                                </div>
+
+                                <textarea id="rawTaskText" rows="4" class="w-full text-xs p-3 border-2 border-pink-100 rounded-2xl focus:border-pink-400 focus:outline-none transition bg-slate-50/50 placeholder:text-slate-300" placeholder="พิมพ์โจทย์งาน เช่น: รายงาน Marketing ส่งวันที่ 10 พ.ย. 2026 ความยากปานกลาง อนุญาตให้ใช้ AI ช่วยตรวจ Grammar..."></textarea>
+                            </div>
+
+                            <button onclick="extractTaskData()" class="w-full bg-gradient-to-r from-pink-400 to-rose-400 hover:from-pink-500 hover:to-rose-500 text-white font-bold py-3 rounded-2xl cute-btn transition flex items-center justify-center space-x-2 shadow-cute text-xs">
+                                <span>🪄 วิเคราะห์ด้วย AI</span>
+                            </button>
+                        </div>
+
+                        <!-- Right: Output Card -->
+                        <div class="bg-white p-6 cute-card shadow-cute border-2 border-pink-100 flex flex-col justify-between">
+                            <div>
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="font-bold text-slate-700 text-sm flex items-center space-x-2">
+                                        <span>✨ ผลการสกัดข้อมูล (Task Card)</span>
+                                    </h3>
+                                    <span id="extractBadge" class="hidden text-[10px] bg-emerald-100 text-emerald-600 px-2.5 py-0.5 rounded-full font-bold">สกัดสำเร็จแล้ว 🎉</span>
+                                </div>
+
+                                <div id="extractionPlaceholder" class="border-2 border-dashed border-pink-100 rounded-2xl p-8 text-center text-slate-400 my-auto flex flex-col items-center justify-center h-56 bg-pink-50/10">
+                                    <div class="text-4xl mb-2">🤖🎀</div>
+                                    <p class="text-xs text-slate-400">กดวิเคราะห์เพื่อดึง ชื่องาน, วิชา, กำหนดส่ง อัตโนมัติ</p>
+                                </div>
+
+                                <div id="extractedCard" class="hidden space-y-3 bg-pink-50/40 p-4 rounded-2xl border border-pink-100">
+                                    <div>
+                                        <label class="text-[10px] font-bold text-pink-400 uppercase">📌 ชื่องาน</label>
+                                        <input type="text" id="extractedTitle" class="w-full bg-white font-semibold text-slate-700 text-xs p-2.5 mt-1 border border-pink-200 rounded-xl outline-none">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="text-[10px] font-bold text-pink-400 uppercase">📚 รายวิชา</label>
+                                            <input type="text" id="extractedSubject" class="w-full bg-white text-slate-700 text-xs p-2.5 mt-1 border border-pink-200 rounded-xl outline-none">
+                                        </div>
+                                        <div>
+                                            <label class="text-[10px] font-bold text-pink-400 uppercase">⏰ วันกำหนดส่ง</label>
+                                            <input type="date" id="extractedDueDate" class="w-full bg-white text-slate-700 text-xs p-2.5 mt-1 border border-pink-200 rounded-xl outline-none">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] font-bold text-pink-400 uppercase">⭐ ความยากที่ประเมิน</label>
+                                        <select id="userDiff" class="w-full bg-white text-slate-700 text-xs p-2.5 mt-1 border border-pink-200 rounded-xl outline-none">
+                                            <option value="1">1 - ง่าย (ใช้เวลา ~2 ชม.)</option>
+                                            <option value="2">2 - ชิลๆ (ใช้เวลา ~4 ชม.)</option>
+                                            <option value="3" selected>3 - ปานกลาง (ใช้เวลา ~6 ชม.)</option>
+                                            <option value="4">4 - ยาก/โปรเจกต์ (ใช้เวลา ~10 ชม.)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="saveBtnContainer" class="hidden pt-4">
+                                <button onclick="saveTaskToList()" class="w-full bg-emerald-400 hover:bg-emerald-500 text-white font-bold py-3 rounded-2xl cute-btn transition flex items-center justify-center space-x-2 text-xs shadow-sm">
+                                    <span>💾 บันทึกลงระบบ & ปฏิทิน</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Task List Table -->
+                    <div class="bg-white p-6 cute-card shadow-cute border-2 border-pink-100">
+                        <h3 class="font-bold text-slate-700 text-sm mb-4">🎀 รายการงานทั้งหมดของคุณ</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-pink-50 text-pink-500">
+                                    <tr>
+                                        <th class="p-3 rounded-l-xl font-bold">ชื่องาน</th>
+                                        <th class="p-3 font-bold">วิชา</th>
+                                        <th class="p-3 font-bold">กำหนดส่ง</th>
+                                        <th class="p-3 font-bold">เวลาประเมิน</th>
+                                        <th class="p-3 text-center rounded-r-xl font-bold">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="taskListTable" class="divide-y divide-pink-50"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: WORKLOAD PREDICTOR -->
+                <div id="tab-predictor" class="tab-content hidden space-y-6 max-w-5xl mx-auto">
+                    <div id="workloadAlert" class="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 p-5 rounded-2xl flex items-start space-x-3 shadow-cute">
+                        <div class="text-3xl">⚠️</div>
+                        <div>
+                            <h4 class="font-bold text-amber-800 text-xs">เตือนภัยภาระงานสูงผิดปกติ! (Peak Workload Warning) 🚨</h4>
+                            <p class="text-xs text-amber-700 mt-1">สัปดาห์นี้น้องมีภาระงานรวม <span id="alertWorkloadHours" class="font-bold underline">19 ชั่วโมง</span> ซึ่งเกินเวลาว่างปกติ แนะนำให้แบ่งงานทำตั้งแต่เนิ่นๆ นะคะ!</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="bg-white p-5 cute-card border-2 border-pink-100 shadow-cute text-center">
+                            <p class="text-[11px] text-pink-400 font-bold uppercase">📦 งานทั้งหมด</p>
+                            <h3 id="totalTasksCount" class="text-2xl font-bold font-cute text-slate-700 mt-1">0 งาน</h3>
+                        </div>
+                        <div class="bg-white p-5 cute-card border-2 border-pink-100 shadow-cute text-center">
+                            <p class="text-[11px] text-pink-400 font-bold uppercase">⏳ เวลารวมประเมิน</p>
+                            <h3 id="totalHoursCount" class="text-2xl font-bold font-cute text-pink-500 mt-1">0 ชั่วโมง</h3>
+                        </div>
+                        <div class="bg-white p-5 cute-card border-2 border-pink-100 shadow-cute text-center">
+                            <p class="text-[11px] text-pink-400 font-bold uppercase">🔥 ช่วงงานแน่นที่สุด</p>
+                            <h3 class="text-2xl font-bold font-cute text-rose-500 mt-1">สัปดาห์นี้</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: SMART SCHEDULER -->
+                <div id="tab-scheduler" class="tab-content hidden space-y-6 max-w-5xl mx-auto">
+                    <div class="bg-white p-6 cute-card shadow-cute border-2 border-pink-100">
+                        <h3 class="font-bold text-slate-700 text-sm mb-4">🧩 ตารางงานย่อยพร้อม Buffer & Break Time</h3>
+                        <div id="scheduleTimeline" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: REPLANNING -->
+                <div id="tab-replanning" class="tab-content hidden space-y-6 max-w-5xl mx-auto">
+                    <div class="bg-white p-6 cute-card shadow-cute border-2 border-pink-100 space-y-4">
+                        <h3 class="font-bold text-slate-700 text-sm">🚨 ปรับตารางงานใหม่อัตโนมัติเมื่อเกิดเหตุฉุกเฉิน</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <button onclick="triggerEmergency('sick')" class="p-4 border-2 border-pink-100 hover:border-pink-300 rounded-2xl text-left bg-slate-50/30">
+                                <div class="text-xl mb-1">🤒</div>
+                                <p class="text-xs font-bold text-slate-700">ป่วย / ต้องการพัก</p>
+                            </button>
+                            <button onclick="triggerEmergency('urgent')" class="p-4 border-2 border-amber-100 hover:border-amber-300 rounded-2xl text-left bg-slate-50/30">
+                                <div class="text-xl mb-1">⚡</div>
+                                <p class="text-xs font-bold text-slate-700">มีงานด่วนแทรก</p>
+                            </button>
+                            <button onclick="triggerEmergency('behind')" class="p-4 border-2 border-blue-100 hover:border-blue-300 rounded-2xl text-left bg-slate-50/30">
+                                <div class="text-xl mb-1">🐢</div>
+                                <p class="text-xs font-bold text-slate-700">ทำงานไม่ทันตามแผน</p>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="replanResultCard" class="hidden bg-white p-6 cute-card shadow-cute border-2 border-pink-100 space-y-3">
+                        <h4 class="font-bold text-slate-700 text-xs">✨ ผลการจัดตารางใหม่ด้วย AI</h4>
+                        <div id="replanExplanation" class="text-xs bg-pink-50 text-pink-800 p-3.5 rounded-xl"></div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-800 text-white px-5 py-3 rounded-2xl shadow-cute flex items-center space-x-3 translate-y-24 opacity-0 transition duration-300 z-50 text-xs font-bold">
+        <span id="toastIcon">🌸</span>
+        <span id="toastMsg">แจ้งเตือน</span>
+    </div>
+
+    <!-- App Logic & Calendar Script -->
+    <script>
+        let calendar = null;
+        let tasks = [
+            { id: '1', title: 'รายงาน Marketing 10 หน้า', subject: 'Marketing', dueDate: '2026-11-05', difficulty: 3, hours: 6 },
+            { id: '2', title: 'ออกแบบ UI CUTE CALENDAR', subject: 'UX Design', dueDate: '2026-10-30', difficulty: 4, hours: 10 }
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            initCalendar();
+            renderTasks();
+            generateSmartSchedule();
+        });
+
+        function initCalendar() {
+            const calendarEl = document.getElementById('calendar');
+            if(!calendarEl) return;
+
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                buttonText: {
+                    today: 'วันนี้',
+                    month: 'เดือน',
+                    week: 'สัปดาห์',
+                    day: 'วัน'
+                },
+                events: formatTasksToCalendarEvents(),
+                eventClick: function(info) {
+                    showToast(`งาน: ${info.event.title}`, "info");
+                }
+            });
+            calendar.render();
+        }
+
+        function formatTasksToCalendarEvents() {
+            const events = [];
+            tasks.forEach(t => {
+                // Main Deadline Event
+                events.push({
+                    title: `📌 [ส่ง] ${t.title}`,
+                    start: t.dueDate,
+                    backgroundColor: '#FF85A1',
+                    borderColor: '#FF85A1'
+                });
+                // Sub-task Prep Event
+                events.push({
+                    title: `🧩 [เตรียม] ${t.title}`,
+                    start: t.dueDate,
+                    backgroundColor: '#4EA8DE',
+                    borderColor: '#4EA8DE'
+                });
+            });
+            return events;
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('bg-pink-400', 'text-white', 'shadow-cute-sm');
+                el.classList.add('text-slate-500');
+            });
+
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            const activeNav = document.getElementById(`nav-${tabName}`);
+            if(activeNav) {
+                activeNav.classList.add('bg-pink-400', 'text-white', 'shadow-cute-sm');
+            }
+
+            if(tabName === 'calendar' && calendar) {
+                setTimeout(() => calendar.updateSize(), 100);
+            }
+
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+        }
+
+        // Firebase Auth Wrappers
+        async function handleEmailLogin() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            if(!email || !password) return showToast("กรุณากรอกอีเมลและรหัสผ่านค่ะ 🎀", "warning");
+
+            try {
+                await window.signInWithEmailAndPassword(window.firebaseAuth, email, password);
+            } catch (err) {
+                showToast("เข้าสู่ระบบไม่สำเร็จ: " + err.message, "warning");
+            }
+        }
+
+        async function handleEmailSignUp() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            if(!email || !password) return showToast("กรุณากรอกข้อมูลให้ครบถ้วนค่ะ", "warning");
+
+            try {
+                await window.createUserWithEmailAndPassword(window.firebaseAuth, email, password);
+            } catch (err) {
+                showToast("สมัครสมาชิกไม่สำเร็จ: " + err.message, "warning");
+            }
+        }
+
+        async function handleGoogleLogin() {
+            try {
+                const provider = new window.GoogleAuthProvider();
+                await window.signInWithPopup(window.firebaseAuth, provider);
+            } catch(err) {
+                showToast("Google Login ไม่สำเร็จ ลองวิธีแบบ Guest ได้เลยค่ะ!", "warning");
+            }
+        }
+
+        async function handleGuestLogin() {
+            try {
+                await window.signInAnonymously(window.firebaseAuth);
+            } catch(err) {
+                document.getElementById('authOverlay').classList.add('hidden');
+                document.getElementById('mainAppLayout').classList.remove('hidden');
+            }
+        }
+
+        function handleLogout() {
+            window.signOut(window.firebaseAuth);
+            showToast("ออกจากระบบเรียบร้อยแล้วค่ะ 👋", "info");
+        }
+
+        // Cloud Task Synchronization
+        function subscribeUserTasks(uid) {
+            const tasksRef = window.collection(window.firebaseDb, 'artifacts', window.appId, 'users', uid, 'tasks');
+            window.onSnapshot(tasksRef, (snapshot) => {
+                const loaded = [];
+                snapshot.forEach(doc => loaded.push({ id: doc.id, ...doc.data() }));
+                if(loaded.length > 0) tasks = loaded;
+                renderTasks();
+                if(calendar) {
+                    calendar.removeAllEvents();
+                    calendar.addEventSource(formatTasksToCalendarEvents());
+                }
+            }, (err) => {
+                renderTasks();
+            });
+        }
+
+        function extractTaskData() {
+            showToast("AI กำลังอ่านและถอดข้อมูล... ✨", "info");
+            setTimeout(() => {
+                document.getElementById('extractionPlaceholder').classList.add('hidden');
+                document.getElementById('extractedCard').classList.remove('hidden');
+                document.getElementById('saveBtnContainer').classList.remove('hidden');
+                document.getElementById('extractBadge').classList.remove('hidden');
+
+                document.getElementById('extractedTitle').value = "รายงานวิจัย Software Engineering";
+                document.getElementById('extractedSubject').value = "Computer Science";
+                document.getElementById('extractedDueDate').value = "2026-11-12";
+                
+                confetti({ particleCount: 30, spread: 50 });
+                showToast("สกัดข้อมูลสำเร็จแล้วค่ะ 🎉", "success");
+            }, 500);
+        }
+
+        async function saveTaskToList() {
+            const title = document.getElementById('extractedTitle').value;
+            const subject = document.getElementById('extractedSubject').value;
+            const dueDate = document.getElementById('extractedDueDate').value;
+            const diff = parseInt(document.getElementById('userDiff').value);
+
+            const newTask = {
+                title: title || 'งานใหม่',
+                subject: subject || 'วิชาทั่วไป',
+                dueDate: dueDate || '2026-11-10',
+                difficulty: diff,
+                hours: diff * 2.5
+            };
+
+            if(window.currentUser) {
+                const docRef = window.doc(window.collection(window.firebaseDb, 'artifacts', window.appId, 'users', window.currentUser.uid, 'tasks'));
+                await window.setDoc(docRef, newTask);
+            } else {
+                tasks.push({ id: Date.now().toString(), ...newTask });
+                renderTasks();
+            }
+
+            if(calendar) {
+                calendar.addEvent({
+                    title: `📌 [ส่ง] ${newTask.title}`,
+                    start: newTask.dueDate,
+                    backgroundColor: '#FF85A1',
+                    borderColor: '#FF85A1'
+                });
+            }
+
+            showToast("บันทึกงานเข้าปฏิทินเรียบร้อยแล้วค่ะ 💖", "success");
+            switchTab('calendar');
+        }
+
+        function renderTasks() {
+            const tbody = document.getElementById('taskListTable');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            let totalHrs = 0;
+            tasks.forEach(t => {
+                totalHrs += t.hours;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-slate-700">${t.title}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 bg-pink-100 text-pink-600 rounded-full font-bold">${t.subject}</span></td>
+                    <td class="p-3">${t.dueDate}</td>
+                    <td class="p-3 font-bold text-pink-500">~${t.hours} ชม.</td>
+                    <td class="p-3 text-center">
+                        <button onclick="deleteTask('${t.id}')" class="text-pink-300 hover:text-rose-500"><i class="fa-solid fa-trash-can"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('totalTasksCount').innerText = `${tasks.length} งาน`;
+            document.getElementById('totalHoursCount').innerText = `${totalHrs} ชั่วโมง`;
+        }
+
+        async function deleteTask(id) {
+            if(window.currentUser) {
+                await window.deleteDoc(window.doc(window.firebaseDb, 'artifacts', window.appId, 'users', window.currentUser.uid, 'tasks', id));
+            } else {
+                tasks = tasks.filter(t => t.id !== id);
+                renderTasks();
+            }
+            showToast("ลบงานสำเร็จแล้วค่ะ 🧹", "info");
+        }
+
+        function generateSmartSchedule() {
+            const container = document.getElementById('scheduleTimeline');
+            if(!container) return;
+            container.innerHTML = `
+                <div class="p-3 bg-pink-50 rounded-xl border border-pink-100 text-xs flex justify-between items-center">
+                    <span>📝 ขั้นตอนที่ 1: ค้นคว้าข้อมูลและทำเค้าโครงการทำรายงาน</span>
+                    <span class="font-bold text-pink-600">1.5 ชม.</span>
+                </div>
+                <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs flex justify-between items-center">
+                    <span>🧋 Break Time: พักจิบชานมและยืดเส้นยืดสาย</span>
+                    <span class="font-bold text-emerald-600">20 นาที</span>
+                </div>
+            `;
+        }
+
+        function triggerEmergency(type) {
+            const card = document.getElementById('replanResultCard');
+            const explanation = document.getElementById('replanExplanation');
+            card.classList.remove('hidden');
+            explanation.innerText = "AI ปรับโยกตารางงานวันนี้ไปยังวันว่างถัดไปให้อัตโนมัติ เพื่อให้พักผ่อนได้เต็มที่ค่ะ 🌸";
+            showToast("ปรับตารางงานใหม่เรียบร้อยค่ะ! ✨", "success");
+        }
+
+        function simulateFileUpload() {
+            document.getElementById('rawTaskText').value = "การบ้านวิชา Software Engineering รายงานความยาว 10 หน้า กำหนดส่ง 12 พ.ย. 2026 อนุญาตให้ใช้ AI ค้นคว้าได้";
+            showToast("โหลดไฟล์ตัวอย่างเรียบร้อยแล้วค่ะ 📄✨", "info");
+        }
+
+        function showToast(msg, type = "info") {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 3000);
+        }
+    </script>
+</body>
+</html>
